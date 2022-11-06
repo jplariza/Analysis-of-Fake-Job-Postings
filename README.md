@@ -11,6 +11,7 @@ This project was done in 24 hours, we analyzed the key attributes the best we co
 
 ### Code
 We mainly used R and Microsoft Excel to develop the graphs we used for our analysis. 
+As of libraries in R, we used ggplot2, tidyverse, dplyr, and plotly to make our visualizations 
 
 ### Installation
 If you would like to follow along and run the code yourself, you will need RStudio to run R or open the CSV file provided and create the graphs through Excel.  
