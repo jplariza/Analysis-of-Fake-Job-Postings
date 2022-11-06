@@ -1,0 +1,209 @@
+---
+title: "Busch_Consulting_Group_Fake_Job_Postings"
+author: "Joann Lariza, Anish Gupta, Yingfan He"
+date: '2022-11-06'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(rvest)
+library(jsonlite)
+library(ggthemes)
+library(readxl)
+library(lubridate)
+library(sf)
+library(mapview)
+library(plotly)
+library(dplyr)
+library(maps)
+library(packcircles)
+library(reshape2)
+library(RColorBrewer)
+library(countrycode)
+library(ggbeeswarm)
+library(rworldmap)
+library(tmap)
+library(shiny)
+library(leaflet)
+library(tmaptools)
+library(spData)
+library(tigris)
+library(gganimate)
+library(knitr)
+library(png)
+library(viridis)
+library(shinyjs)
+library(tidytext)
+library(wordcloud)
+library(treemapify)
+
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### Read fake_jobs file
+```{r read files}
+fake_jobs <- read_csv("fake_job_postingsFRAUDULENTONLYwithlongLat.csv")
+#glimpse(fake_jobs)
+```
+
+#### Clean file
+```{r Clean fake_jobs file}
+fake_jobs <- fake_jobs %>%
+  # Get country names from countrycode
+  mutate(country_name = countrycode(sourcevar = country, "iso2c", destination = "country.name")) %>%
+  mutate(longitude = ifelse(is.na(longitude), 0, longitude)) %>%
+  mutate(latitude = ifelse(is.na(latitude), 0, latitude))
+#glimpse(fake_jobs)
+```
+
+### World Map of all Fake Jobs 
+```{r World Map of Fake Jobs}
+fake_jobs %>%
+  mapview(xcol = "longitude", ycol = "latitude", crs = 4269, grid = FALSE, legend = FALSE)
+```
+
+#### Number of Fake Jobs by each Country
+```{r Number of Fake Jobs by Country}
+fake_jobs_by_country <- fake_jobs %>%
+  group_by(country_name) %>%
+  summarise(fake_job_numbers = n(), na.rm = TRUE) %>%
+  select(country_name, fake_job_numbers)
+
+fake_jobs_by_country <- fake_jobs_by_country[!is.na(fake_jobs_by_country$country_name), ]
+
+fake_jobs_by_country<-fake_jobs_by_country %>%
+  rename(name = country_name)
+
+#View(fake_jobs_by_country)
+```
+
+### Heatmap of all Fake Jobs Worldwide
+```{r Heatmap of Fake Jobs Worldwide}
+data("World")
+World2 <- merge(World, fake_jobs_by_country, by="name")
+#View(World2)
+World2 <- st_sf(World2)
+
+tm_shape(World2) +
+  tm_polygons("fake_job_numbers", contrast=.7, id = "NAME", title = "Heatmap of Fake Jobs Worldwide", palette = "Accent") +
+  tmap_mode("view")
+
+```
+
+#### Get Fake Jobs in USA by State
+```{r fake jobs USA}
+fake_jobs_usa <- fake_jobs %>%
+  filter(country_name == "United States") %>%
+  rename(STUSPS = state) %>%
+  drop_na(STUSPS)
+
+fake_jobs_usa_by_state <- fake_jobs_usa %>%
+  group_by(STUSPS) %>%
+  summarise(fake_job_numbers = n(), na.rm = TRUE) %>%
+  select(STUSPS, fake_job_numbers)
+  
+#View(fake_jobs_usa)
+```
+
+#### Create dataframe for USA fake jobs by States Map
+```{r dataframe for USA fake jobs map}
+us <- states(class = "sf")
+us2 <- merge(us, fake_jobs_usa_by_state, by="STUSPS")
+#glimpse(us2)
+```
+
+### Heatmap of USA Fake Jobs by State
+```{r Map of Fake Jobs by State}
+tm_shape(us2) +
+  tm_polygons("fake_job_numbers", id = "NAME", title = "Heatmap of Fake Jobs by State", palette = "Reds")
+```
+
+#### Prepare data for building a Word Cloud of Job Title keywords
+```{r Data prep for Building a Word Cloud}
+fake_jobs_title <- fake_jobs %>%
+  select(title)
+
+
+# tokenize
+tokens <- fake_jobs_title %>% 
+  unnest_tokens(word, title) %>% 
+  dplyr::count(word, sort = TRUE) %>% 
+  ungroup()
+
+tokens %>%
+  head(10)
+
+# remove stop words
+data("stop_words")
+tokens_clean <- tokens %>%
+  anti_join(stop_words)
+
+# remove numbers
+nums <- tokens_clean %>% 
+  filter(str_detect(word, "^[0-9]")) %>% 
+  select(word) %>% 
+  unique()
+
+tokens_clean <- tokens_clean %>% 
+  anti_join(nums, by = "word")
+```
+
+### Word Cloud of Job Title keywords
+```{r Create Word Cloud}
+# define a nice color palette
+pal <- brewer.pal(8,"Dark2")
+
+# plot the 50 most common words
+tokens_clean %>% 
+  with(wordcloud(word, n, random.order = FALSE, max.words = 50, colors=pal))
+
+
+```
+
+#### Read fake jobs
+```{r read fake jobs}
+fake <- read_csv("fake_job_postingsFRAUDULENTONLY.csv")
+#fake
+
+```
+
+
+
+# Fake Jobs in different industries
+```{r fake jobs by industry}
+p <- ggplot(fake, aes(fill=fake$required_experience, y=fake$job_id, x=fake$required_education)) + 
+  geom_bar(position="stack", stat="identity")
+p1 <- p + theme(axis.text.x = element_text(angle = 90))
+ggplotly(p1)
+
+```
+
+
+
+# Required experience vs. required education (based off of fake job postings)
+```{r experience vs. education}
+p <- ggplot(fake, aes(x=fake$industry, fill=fake$industry)) + geom_bar() 
+p2 <- p + theme(axis.text.x = element_text(angle = 90))
+ggplotly(p2)
+
+
+```
+
+
+
+# Salaries within industries (based off of fake job postings)
+```{r salaries within industry}
+p <- ggplot(fake, aes(x=fake$industry,y=fake$salary,fill=fake$industry)) +
+   geom_boxplot()
+p3 <- p + theme(axis.text.x = element_text(angle = 90)) + 
+  labs(title="Box plot of salary ranges", 
+       subtitle="Grouped by industry",
+       x="Industry",
+       y="Salary")
+
+ggplotly(p3)
+
+```
